@@ -1,0 +1,226 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TM Voice Model with Web Serial</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.9.0/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
+  <script src="bluetoothConnection.js"></script>
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    td {
+      border: 3px solid black;
+      padding: 10px;
+      vertical-align: top;
+    }
+  </style>
+</head>
+
+
+
+
+
+<body>
+  <table>
+    <tr>
+      <td>
+        <div>
+          <h1 style="font-size:40px;">TM Voice Model for MCU(Arduino/ma:bit)</h1>
+          <label for="url-input">Teachable Machine Voice Model URL: </label>
+          <input type="text" id="url-input">
+          <button type="button" onclick="saveURL()">OK</button>
+          <p>Saved URL: <span id="saved-url"></span></p>
+          <label for="url-input">Confidence Setting: </label>
+          <input type="text" id="con-input">
+          <button type="button" onclick="saveCON()">OK(0-100)</button>
+          <p>Confidence Setting Value : <span id="saved-con"></span></p>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div>
+          <h3>Connect to a serial port</h3>
+          <button id="connect-to-serial">Connect</button>
+          <button id="disconnect-serial">Disconnect</button>
+        </div>
+        <div>
+          <h3>Connect to BLE</h3>
+          <button id="connectButton">Connect</button>
+          <button id="disconnectButton">Disconnect</button>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <div>
+          <h2>Teachable Machine Voice Model with Micro:bit</h2>
+          <button type="button" onclick="init()"><h2>S t a r t</h2></button>
+          <br/>
+          <h2><div id="label-container"></div></h2>
+          <div id="lastSentClassContainer">Last Sent Class: <span id="lastSentClass">None</span></div>
+          <div id="classNameContainer">Current Class: <span id="className">None</span></div>
+        </div>
+      </td>
+    </tr>
+<tr>
+      <td> 
+
+    <p>Information teacher at Songdo middle school/adjunct professor at Inha University. Seok Jeon Kim. 2023.04.24. alphaco@kakao.com</p>
+
+    <p>Local server web app using WebSerial and WebBLE to pass TM results to MCU wired/wireless.</p>
+
+    <p>You can use any MCU like Arduino, Microbit, ESP32, Raspberry Pi Pico.</p>
+
+    <p>Tested on Chrome and Edge. For hardware, pre-upload code using block coding or text coding.</p>
+
+    <p>Insert a link to the trained model and enter the accuracy</p>
+
+    <p>Connect various output devices to create AIoT applications.</p>
+
+    <p>CCL: BY-NC-ND</p>
+
+    <p><a href="//https://teachablemachine.withgoogle.com/models/0IuweKhqb/">https://teachablemachine.withgoogle.com/models/0IuweKhqb/</a></p>
+    
+    <p>A:go, B:start</p>
+
+</td>
+    </tr>
+  </table>
+
+
+
+  <script>
+    let setConfidence; // from 0 - 100
+    let URL; // 전역 변수로 선언
+      let classLabels;
+
+    function saveCON() {
+      setConfidence = document.getElementById("con-input").value; 
+      document.getElementById("saved-con").innerText = setConfidence;
+    }
+
+    function saveURL() {
+      URL = document.getElementById("url-input").value;
+      document.getElementById("saved-url").innerText = URL;
+    }
+
+
+        // Connect and disconnect to serial
+    document.getElementById('connect-to-serial').addEventListener('click', async () => {
+        if ('serial' in navigator) {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                alert('Connected to Micro:bit');
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        } else {
+            console.error('Web Serial API not supported.');
+        }
+    });
+
+    document.getElementById('disconnect-serial').addEventListener('click', async () => {
+        if ('serial' in navigator) {
+            if (port && port.close) {
+                await port.close();
+                port = null;
+                alert('Disconnected from Micro:bit')
+                console.log('Disconnected from the serial port');
+            } else {
+                console.error('No active serial connection to disconnect');
+            }
+        } else {
+            console.error('Web Serial API not supported.');
+        }
+    });
+
+    // Connect and disconnect to BLE
+    document.getElementById('connectButton').addEventListener('click', async () => {
+        await microBitConnect();
+        alert('Connected to Micro:bit');
+    });
+
+    document.getElementById('disconnectButton').addEventListener('click', () => {
+        microBitDisconnect();
+        alert('Disconnected from Micro:bit');
+    });
+
+
+
+
+
+    let recognizer, port;
+
+    async function init() {
+      recognizer = await createModel();
+      startListening();
+    }
+
+    async function createModel() {
+      const checkpointURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+      const recognizer = speechCommands.create("BROWSER_FFT", undefined, checkpointURL, metadataURL);
+      await recognizer.ensureModelLoaded();
+      return recognizer;
+    }
+
+    let lastSentClass = null;
+    let classN = null; 
+    function startListening() {
+      let classLabels = recognizer.wordLabels();
+      const labelContainer = document.getElementById("label-container");
+      labelContainer.appendChild(document.createElement("div"));
+      recognizer.listen(result => {
+        const scores = result.scores;
+        let max = 0, imax = -1, maxClassPrediction = '';
+        for (let i = 0; i < classLabels.length; i++) {
+          const conf = Math.round(Number(result.scores[i].toFixed(2)) * 10000) / 100;
+          if (conf > max) {
+            max = conf;
+            imax = i;
+            maxClassPrediction = classLabels[i] + ": " + conf.toFixed(2);
+          }
+        }
+        if (max > setConfidence && imax >= 0) {
+
+          let classN = classLabels[imax];
+
+          //백그라운드 노이즈일경우 전송 안함. 
+          if (classN !== '배경 소음') {  //'Background Noise'로 대체 가능
+          // Send the result via BLE
+          microBitWriteString(classN + ' ');
+
+          	if (port && port.writable) {
+            	const writer = port.writable.getWriter();
+            	const data = new TextEncoder().encode(classN);
+            	writer.write(data);
+            	writer.releaseLock();
+            	console.log(data);
+          	}
+            // Update the HTML elements with new values
+            document.getElementById("lastSentClass").textContent = lastSentClass;
+            document.getElementById("className").textContent = classN;
+          }
+          lastSentClass = classN;
+          labelContainer.childNodes[0].innerHTML = maxClassPrediction;
+        }
+      }, {
+        includeSpectrogram: true,
+        probabilityThreshold: 0.75,
+        invokeCallbackOnNoiseAndUnknown: true,
+        overlapFactor: 0.50
+      });
+    }
+  </script>
+</body>
+</html>
+
