@@ -12,10 +12,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     <script src="bluetoothConnection.js"></script>
 </head>
-
-
 <body>
-    <h1 style="font-size:40px;">TM Image Model for MCU(Arduino/ma:bit)</h1>
+    <h1 style="font-size:30px;">Teachable Image Model for Microbit</h1>
     <label for="model-url-input">Teachable Machine Image Model URL:</label>
     <input type="text" id="model-url-input" placeholder="Enter your model URL here" >
     <br>
@@ -30,9 +28,6 @@
     <br>
     <button id="connect-to-serial" type="button">Connect to WebSerial</button>
     <button id="disconnect-serial" type="button">Disconnect from WebSerial</button>
-    <br>
-    <button id="connectButton">Connect to BLE</button>
-    <button id="disconnectButton">Disconnect from BLE</button>
     <br>
     <label for="width-input">Canvas Width:</label>
     <input type="number" id="width-input">
@@ -53,91 +48,37 @@
     <canvas id="canvas"></canvas>
     <br>
     <button type="button" onclick="loadModel()">Load Model</button>
-    <button type="button" onclick="init()" disabled id="start-button">Start Teachable Machine</button>
+    <button type="button" onclick="init()" id="start-button">Start Teachable Machine</button>
     <div id="label-container" style="font-size:20px;"></div>
     <div id="lastSentClassContainer">Last Sent Class: <span id="lastSentClass">None</span></div>
     <div id="classNameContainer">Current Class: <span id="className">None</span></div>
     <br>
-    <br>
-    <div style="width: 600px; border: 2px solid black; padding: 10px; margin: 0px;">
-       <table>
-           <TR>
-               <td>Information teacher at Songdo middle school/adjunct professor at Inha niversity.Seok Jeon Kim. 2023.04.24.alphaco@kakao.com</td>
-           </tr>
-           <TR>
-               <td>Local server web app using WebSerial and WebBLE to pass TM results to MCU wired/wireless.</td>
-           </tr>
-           <TR>
-               <td>You can use any MCU like Arduino, Microbit, ESP32, Raspberry Pi Pico.</td>
-           </tr>
-           <TR>
-               <td>Tested on Chrome and Edge. For hardware, pre-upload code using block coding or text coding.</td>
-           </tr>
-           <TR>
-               <td>It is stable only when running on Node.js http server.</td>
-           </tr>
-           <TR>
-               <td>Insert a link to the trained model and enter the accuracy</td>
-           </tr>
-           <TR>
-               <td>Transmission data in Arduino is a string, so conversion to ASCII code is required.</td>
-           </tr>
-           <TR>
-               <td>Connect various output devices to create AIoT applications.</td>
-           </tr>
-           <TR>
-               <td>CCL: BY-NC-ND</td>
-           </tr>
-           <TR>
-               <td><a href="https://teachablemachine.withgoogle.com/models/FCf4j3VIe/">	https://teachablemachine.withgoogle.com/models/FCf4j3VIe/</a></td>
-           </tr>
-       </table>
-     </div>
-
     <script>
-        // Global variables
         let webcam = null;
-        let canvasWidth = 600;
-        let canvasHeight = 600;
+        let canvasWidth = 300;
+        let canvasHeight = 300;
         let model, labelContainer, maxPredictions;
-        let URL = ""; 
-        let selectedWebcamId = ""; 
+        let URL = "";
+        let selectedWebcamId = "";
         let videoDevices = [];
         let predictionValue = 0;
         let port;
-        
-        
 
-        // ======================================================================================
-        // Utility functions
-        // ======================================================================================
-        
         async function loadModel() {
-        
-        
-        if (!URL) {
-            alert('Please enter a model URL');
-            return;
+            if (!URL) {
+                alert('Please enter a model URL');
+                return;
+            }
+            try {
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+                await tmImage.load(modelURL, metadataURL);
+                document.getElementById("start-button").disabled = false;
+            } catch (error) {
+                alert('Failed to load the model. Please check the URL and try again.');
+            }
         }
 
-        // Try loading the model to make sure the URL is valid
-        try {
-            const modelURL = URL + "model.json";
-            const metadataURL = URL + "metadata.json";
-            await tmImage.load(modelURL, metadataURL);
-
-            // If the model was successfully loaded, enable the Start button
-            document.getElementById("start-button").disabled = false;
-        } catch (error) {
-            // If the model couldn't be loaded, show an error message
-            alert('Failed to load the model. Please check the URL and try again.');
-        }
-    }
-
-
-
-
-        // Sets the URL of the model to be used
         function setModelUrl() {
             const modelUrlInput = document.getElementById('model-url-input');
             URL = modelUrlInput.value;
@@ -145,7 +86,6 @@
             modelUrlDisplay.textContent = `Model URL: ${URL}`;
         }
 
-        // Sets the prediction value for the model
         function setPredictionValue() {
             const predictionInput = document.getElementById('prediction-input');
             predictionValue = parseFloat(predictionInput.value);
@@ -153,154 +93,14 @@
             predictionDisplay.textContent = `Prediction Value: ${predictionValue}`;
         }
 
-        // Changes the size of the canvas based on user input
-        function changeCanvasSize() {
-            const widthInput = document.getElementById('width-input');
-            const heightInput = document.getElementById('height-input');
-            const canvas = document.getElementById('canvas');
-
-            const newWidth = parseInt(widthInput.value);
-            const newHeight = parseInt(heightInput.value);
-
-            if (!isNaN(newWidth) && !isNaN(newHeight)) {
-                canvasWidth = newWidth;
-                canvasHeight = newHeight;
-
-                const video = canvas.previousSibling;
-                video.width = canvasWidth;
-                video.height = canvasHeight;
-                canvas.width = canvasWidth;
-                canvas.height = canvasHeight;
-            }
-        }
-
-        // Changes the selected webcam
-        function changeSelectedWebcam() {
-            const webcamSelect = document.getElementById('webcam-select');
-            selectedWebcamId = webcamSelect.value;
-        }
-
-        // connect-to-serial and disconnect-to-serial
-	document.getElementById('connect-to-serial').addEventListener('click', async () => {
-	            if ('serial' in navigator) {
-   	             try {
-	                    port = await navigator.serial.requestPort();
-	                    await port.open({ baudRate: 115200 });
-                            alert('Connected to Micro:bit');
-	                } catch (error) {
-	                    console.error('Error:', error);
-	                }
-	            } else {
-	                console.error('Web Serial API not supported.');
-	            }
-	        }); 
-
-        document.getElementById('disconnect-serial').addEventListener('click', async () => {
-    	if ('serial' in navigator) {
-       	 if (port && port.close) {
-   	        	 await port.close();
- 	         	 port = null;
-                         alert('Disconnected from Micro:bit')
-   	         console.log('Disconnected from the serial port');
- 	       } else {
- 	           console.error('No active serial connection to disconnect');
-	        }
-	    } else {
- 	       console.error('Web Serial API not supported.');
- 	   }
-	});
-        
-        // connect-to-BLE and disconnect-to-BLE
-	document.getElementById('connectButton').addEventListener('click', async () => {
-        await microBitConnect();
-        alert('Connected to Micro:bit');
-   	 });
-
-	document.getElementById('disconnectButton').addEventListener('click', () => {
-        microBitDisconnect();
-        alert('Disconnected from Micro:bit');
-  	  });
-	
-
-
-        // ======================================================================================
-        // Webcam related functions
-        // ======================================================================================
-
-        // Stops the webcam
-        async function stopWebcam() {
-            if (webcam && webcam.getTracks) {
-                webcam.getTracks().forEach(track => track.stop());
-                webcam = null;
-            }
-        }
-
-        // Sets up the webcam and canvas for displaying video
-        async function setupWebcam() {
-            const video = document.createElement('video');
-            video.width = canvasWidth;
-            video.height = canvasHeight;
-
-            const webcamSelect = document.getElementById('webcam-select');
-            selectedWebcamId = webcamSelect.value;
-
-            const constraints = {
-                video: { deviceId: selectedWebcamId }
-            };
-
-            if (webcam && webcam.stop) {
-                webcam.stop();
-            }
-
-            webcam = await navigator.mediaDevices.getUserMedia(constraints);
-            video.srcObject = webcam;
-            await video.play();
-
-            const canvas = document.getElementById('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
-
-            const drawFrame = () => {
-                ctx.drawImage(video, 0, 0, canvasWidth, canvasHeight);
-                requestAnimationFrame(drawFrame);
-            };
-
-            requestAnimationFrame(drawFrame);
-        }
-
-        // Loads the list of available webcams
-        async function loadWebcams() {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            videoDevices = devices.filter(device => device.kind === 'videoinput');
-            const select = document.getElementById('webcam-select');
-
-            videoDevices.forEach(videoDevice => {
-                const option = document.createElement('option');
-                option.value = videoDevice.deviceId;
-                option.text = videoDevice.label || videoDevice.deviceId;
-                select.appendChild(option);
-            });
-
-            if (videoDevices.length > 0) {
-                selectedWebcamId = videoDevices[0].deviceId;
-                select.value = selectedWebcamId;
-            }
-        }
-
-        // ======================================================================================
-        // Teachable Machine related functions
-        // ======================================================================================
-    
-    // Initializes Teachable Machine
-    async function init() {
+        async function init() {
             const modelURL = URL + "model.json";
             const metadataURL = URL + "metadata.json";
 
             model = await tmImage.load(modelURL, metadataURL);
             maxPredictions = model.getTotalClasses();
 
-            const flip = document.getElementById('flip-webcam').checked; 
+            const flip = document.getElementById('flip-webcam').checked;
 
             if (webcam && webcam.stop) {
                 webcam.stop();
@@ -315,63 +115,65 @@
             for (let i = 0; i < maxPredictions; i++) {
                 labelContainer.appendChild(document.createElement("div"));
             }
+            console.log("Teachable Machine initialized");
         }
-    
-       
-	// Predicts the output of the model
-        let lastSentClass = null;
+
         async function predict() {
             const prediction = await model.predict(webcam.canvas);
-
-            let max = 0, imax = -1, maxClassPrediction = '';
+            let max = 0, imax = -1;
             for (let i = 0; i < maxPredictions; i++) {
                 const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
-                conf = Math.round(Number(prediction[i].probability.toFixed(2)) * 10000) / 100;
+                const conf = Math.round(Number(prediction[i].probability.toFixed(2)) * 10000) / 100;
                 if (conf > max) {
                     max = conf;
                     imax = i;
-                maxClassPrediction = classPrediction;
                 }
             }
 
             if (max > predictionValue && imax >= 0) {
-        
-            let classN = prediction[imax].className;  // changed className to classN
-
-            // Send classN only when it's not the same as the last sent class
-            if (classN !== lastSentClass) {
-            
-            await microBitWriteString(classN + ' ');  // Updated here
-
-            if (port && port.writable) {
-                const writer = port.writable.getWriter();
-                const data = new TextEncoder().encode(classN); 
-                //const data = new Uint8Array([parseInt(classN)]);
-                await writer.write(data);
-                writer.releaseLock();
+                let classN = prediction[imax].className;
+                if (classN !== lastSentClass) {
+                    if (port && port.writable) {
+                        const writer = port.writable.getWriter();
+                        const data = new TextEncoder().encode(classN);
+                        await writer.write(data);
+                        writer.releaseLock();
+                        document.getElementById("lastSentClass").textContent = classN;
+                        document.getElementById("className").textContent = classN;
+                        lastSentClass = classN;
+                    }
                 }
-
-        
-            // Update the HTML elements with new values
-            document.getElementById("lastSentClass").textContent = lastSentClass;
-            document.getElementById("className").textContent = classN;  // changed className to classN
             }
-            lastSentClass = classN; // changed className to classN
-            labelContainer.childNodes[0].innerHTML = maxClassPrediction;
-            }
+            console.log("Prediction: " + max + ", Class: " + prediction[imax].className);
         }
 
-
-
-        // Main loop for prediction
         async function loop() {
-            webcam.update(); 
+            webcam.update();
             await predict();
             window.requestAnimationFrame(loop);
         }
 
-        loadWebcams();
-        setupWebcam();
+        document.getElementById('connect-to-serial').addEventListener('click', async () => {
+            if ('serial' in navigator) {
+                try {
+                    port = await navigator.serial.requestPort();
+                    await port.open({ baudRate: 115200 });
+                    alert('Connected to Micro:bit');
+                } catch (error) {
+                    console.error('Error:', error);
+                }
+            } else {
+                console.error('Web Serial API not supported.');
+            }
+        });
+
+        document.getElementById('disconnect-serial').addEventListener('click', async () => {
+            if (port && port.close) {
+                await port.close();
+                port = null;
+                alert('Disconnected from Micro:bit');
+            }
+        });
     </script>
 </body>
 </html>
